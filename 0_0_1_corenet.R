@@ -1,4 +1,4 @@
-#' CoreNet v1.0 - 2019-July-17
+#' CoreNet v0.1.3 - 2019-July-18
 #' @description CoreNet is a Network Tool to Identify Differential Gene Interactions.
 #' It receives a set of networks (here, each network represents a different cell-type), in the form of an adjacency matrix 
 #' and constructs a core network - a network that shares common edges across all networks in the set. The idea is to compare 
@@ -29,7 +29,7 @@
 #' @examples 
 #' diff_gene_interac<-corenet(data=data,select_number=3000,network_gamma=2.93)
 #' @export
-#' @author David Banh, 2019-07-17
+#' @author David N. Banh, Quan H. Nguyen 
 
 ###
 ###  ***
@@ -49,8 +49,7 @@ print("install packages before running")
 
 
 
-corenet<-function(data,select_number=1000,network_gamma=2.93){
-  
+corenet<-function(data,select_number=1000,network_gamma=2.93,sparse=F){
   gene_names<-row.names(data)
   unique_cell_names<-unique(colnames(data))
   
@@ -59,18 +58,23 @@ corenet<-function(data,select_number=1000,network_gamma=2.93){
   order_genes<-order(apply(data,1,var),decreasing=T)[1:select_number]
   gene_names_test<-as.matrix(gene_names)[order_genes]
   
-  counts_10x_order<-data[order_genes,]
+  data_order<-data[order_genes,]
   
-  to_remove<-lapply(unique(colnames(counts_10x_order)),function(X){
-    c(which(rowSums(counts_10x_order[,which(colnames(counts_10x_order)==X)])==0),
-      which(is.na(apply(counts_10x_order[,which(colnames(counts_10x_order)==X)],1,var))==T)
+  to_remove<-lapply(unique(colnames(data_order)),function(X){
+    c(which(rowSums(data_order[,which(colnames(data_order)==X)])==0),
+      which(is.na(apply(data_order[,which(colnames(data_order)==X)],1,var))==T)
     )
   })
   removalist<-unique(c(do.call('c',to_remove)))
   
-  print("Sparse Cosine Adjacency Matrix construction")
+  print("Cosine Adjacency Matrix construction")
   kernel<-lapply(c(1:length(unique_cell_names)),function(ce){
-    S_cell<-1/as.matrix(qlcMatrix::cosSparse(t(counts_10x_order[-removalist,which(colnames(counts_10x_order)==unique(colnames(counts_10x_order))[ce])])))
+    if (sparse==F){
+      S_cell<-as.matrix(proxy::dist((data_order[-removalist,which(colnames(data_order)==unique(colnames(data_order))[ce])]),method = "cosine"))
+    }
+    if (sparse==T){
+      S_cell<-1/as.matrix(qlcMatrix::cosSparse(t(data_order[-removalist,which(colnames(data_order)==unique(colnames(data_order))[ce])])))
+    }
     diag(S_cell)<-10E-100
     return((S_cell))
   })
@@ -97,6 +101,7 @@ corenet<-function(data,select_number=1000,network_gamma=2.93){
   A=do.call('rbind',lapply(c(1:dim(A)[1]),function(X){A[X,]*(A[X,]<=(A[X,order(A[X,],decreasing = F)[test_edge]]))}))
   core=A+t(A)
   
+  
   print("Graphlet counting")
   core<-netdist::count_orbits_per_node(igraph::graph_from_adjacency_matrix(core!=0,"undirected",diag = F),4)   
 
@@ -117,9 +122,7 @@ corenet<-function(data,select_number=1000,network_gamma=2.93){
     
   })
   print("CoreNet finished")
-  
   return(graphlet_test)
-  
 }
 
 print("please install packages before running - see top, [CTRL-F ***]")
